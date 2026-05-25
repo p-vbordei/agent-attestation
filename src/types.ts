@@ -25,9 +25,9 @@ export interface ActionReceipt {
   prevReceiptId?: string;
   notes?: string;
   signature: {
-    algorithm: "ed25519";
-    keyId: string;
-    value: string;
+    algorithm: "ed25519" | "sigstore-keyless";
+    keyId: string; // public key fingerprint for ed25519, OIDC subject for sigstore
+    value: string; // signature value (base64) or serialized sigstore bundle
   };
 }
 
@@ -37,3 +37,37 @@ export interface TrailSummary {
   count: number;
   merkleRoot: string;
 }
+
+export interface Proof {
+  type: string;
+  created: string;
+  verificationMethod: string;
+  proofPurpose: string;
+  proofValue: string;
+  cryptosuite?: string;
+  [key: string]: unknown;
+}
+
+export interface VerifiableCredential {
+  "@context": string[];
+  id: string;
+  type: string[];
+  issuer: string | { id: string; [key: string]: unknown };
+  validFrom: string;
+  validUntil?: string;
+  credentialSubject: {
+    id: string;
+    agent: ActionReceipt["agent"];
+    actor: ActionReceipt["actor"];
+    action: ActionReceipt["action"];
+    authorization?: ActionReceipt["authorization"];
+    occurredAt: ActionReceipt["occurredAt"];
+    outcome: ActionReceipt["outcome"];
+    outcomeRef?: ActionReceipt["outcomeRef"];
+    prevReceiptId?: ActionReceipt["prevReceiptId"];
+    notes?: ActionReceipt["notes"];
+    [key: string]: unknown;
+  };
+  proof: Proof;
+}
+

@@ -22,6 +22,7 @@ export function fingerprint(publicKeyPem: string): string {
 }
 
 export interface SignActionInput {
+  id?: string;
   agent: ActionReceipt["agent"];
   actor: string;
   action: ActionReceipt["action"];
@@ -41,7 +42,7 @@ export function signAction(
   const keyId = fingerprint(publicKeyPem);
   const draft: ActionReceipt = {
     spec: "agent-attestation/0.1",
-    id: uuidv7(),
+    id: input.id ?? uuidv7(),
     agent: input.agent,
     actor: input.actor,
     action: input.action,

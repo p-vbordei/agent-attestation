@@ -7,6 +7,10 @@ import {
   signAction,
   verifyReceipt,
   verifyTrail,
+  exportToVC,
+  verifyVC,
+  signActionKeyless,
+  verifyKeylessReceipt,
   type ActionReceipt,
 } from "./index.ts";
 
@@ -25,10 +29,15 @@ Usage:
   attest sign-action --agent <id> --actor <key> --verb <v> --target <t>
                      --outcome succeeded|failed|partial [--outcome-ref <r>]
                      [--prev <id>] --key <agent.key>
-  attest verify <receipt.json> --public-key <agent.pub>
+  attest sign-keyless --agent <id> --actor <key> --verb <v> --target <t>
+                      --outcome succeeded|failed|partial [--outcome-ref <r>]
+                      [--prev <id>] [--token <oidc_token>]
+  attest verify <receipt.json> [--public-key <agent.pub>]
   attest inspect <receipt.json>
   attest trail <out.jsonl> <receipt1.json> <receipt2.json> ...
-  attest verify-trail <trail.jsonl> --public-key <agent.pub>
+  attest verify-trail <trail.jsonl> [--public-key <agent.pub>]
+  attest vc-export <receipt.json> --key <agent.key> [--out <vc.json>]
+  attest verify-vc <vc.json> [--public-key <agent.pub>]
 `);
     return;
   }
@@ -76,10 +85,16 @@ Usage:
     case "verify": {
       const file = rest[0];
       const pk = flag(rest, "public-key");
-      if (!file || !pk) throw new Error("usage: verify <receipt.json> --public-key <pub>");
+      if (!file) throw new Error("usage: verify <receipt.json> [--public-key <pub>]");
       const r = JSON.parse(await fs.readFile(file, "utf8")) as ActionReceipt;
-      const pubPem = await fs.readFile(pk, "utf8");
-      const ok = verifyReceipt(r, pubPem);
+      let ok = false;
+      if (r.signature.algorithm === "sigstore-keyless") {
+        ok = await verifyKeylessReceipt(r);
+      } else {
+        if (!pk) throw new Error("public-key flag required for standard signatures");
+        const pubPem = await fs.readFile(pk, "utf8");
+        ok = verifyReceipt(r, pubPem);
+      }
       console.log(ok ? "OK" : "FAILED");
       if (!ok) process.exit(1);
       return;
@@ -115,13 +130,94 @@ Usage:
     case "verify-trail": {
       const file = rest[0];
       const pk = flag(rest, "public-key");
-      if (!file || !pk) throw new Error("usage: verify-trail <trail.jsonl> --public-key <pub>");
+      if (!file) throw new Error("usage: verify-trail <trail.jsonl> [--public-key <pub>]");
       const raw = await fs.readFile(file, "utf8");
       const receipts = raw.split(/\n/).filter(Boolean).map((l) => JSON.parse(l) as ActionReceipt);
-      const pubPem = await fs.readFile(pk, "utf8");
-      const r = verifyTrail(receipts, pubPem);
-      console.log(r.ok ? "OK" : `FAILED: ${r.reason}`);
-      if (!r.ok) process.exit(1);
+      let ok = true;
+      let reason: string | undefined;
+      for (let i = 0; i < receipts.length; i++) {
+        const r = receipts[i]!;
+        let receiptOk = false;
+        if (r.signature.algorithm === "sigstore-keyless") {
+          receiptOk = await verifyKeylessReceipt(r);
+        } else {
+          if (!pk) {
+            ok = false;
+            reason = `public key required to verify standard signature on receipt #${i} (${r.id})`;
+            break;
+          }
+          const pubPem = await fs.readFile(pk, "utf8");
+          receiptOk = verifyReceipt(r, pubPem);
+        }
+        if (!receiptOk) {
+          ok = false;
+          reason = `signature invalid on receipt #${i} (${r.id})`;
+          break;
+        }
+        if (i > 0 && r.prevReceiptId !== receipts[i - 1]!.id) {
+          ok = false;
+          reason = `link broken between #${i - 1} and #${i}`;
+          break;
+        }
+      }
+      console.log(ok ? "OK" : `FAILED: ${reason}`);
+      if (!ok) process.exit(1);
+      return;
+    }
+    case "sign-keyless": {
+      const agentId = flag(rest, "agent");
+      const actor = flag(rest, "actor");
+      const verb = flag(rest, "verb");
+      const target = flag(rest, "target");
+      const outcome = flag(rest, "outcome") as ActionReceipt["outcome"] | undefined;
+      const outcomeRef = flag(rest, "outcome-ref");
+      const prev = flag(rest, "prev");
+      const token = flag(rest, "token");
+      if (!agentId || !actor || !verb || !target || !outcome) {
+        throw new Error("missing required flags; see --help");
+      }
+      const r = await signActionKeyless({
+        agent: { id: agentId },
+        actor,
+        action: { verb, target },
+        outcome,
+        outcomeRef,
+        prevReceiptId: prev,
+        identityToken: token,
+      });
+      process.stdout.write(JSON.stringify(r, null, 2) + "\n");
+      return;
+    }
+    case "vc-export": {
+      const file = rest[0];
+      const keyPath = flag(rest, "key");
+      const out = flag(rest, "out");
+      if (!file || !keyPath) {
+        throw new Error("usage: vc-export <receipt.json> --key <agent.key> [--out <vc.json>]");
+      }
+      const receipt = JSON.parse(await fs.readFile(file, "utf8")) as ActionReceipt;
+      const privateKeyPem = await fs.readFile(keyPath, "utf8");
+      const pubPath = keyPath.replace(/\.key$/, "") + ".pub";
+      const publicKeyPem = await fs.readFile(pubPath, "utf8");
+      const vc = await exportToVC(receipt, privateKeyPem, publicKeyPem);
+      const formatted = JSON.stringify(vc, null, 2) + "\n";
+      if (out) {
+        await fs.writeFile(out, formatted);
+        console.log(`Wrote VC to ${out}`);
+      } else {
+        process.stdout.write(formatted);
+      }
+      return;
+    }
+    case "verify-vc": {
+      const file = rest[0];
+      const pk = flag(rest, "public-key");
+      if (!file) throw new Error("usage: verify-vc <vc.json> [--public-key <pub>]");
+      const vc = JSON.parse(await fs.readFile(file, "utf8"));
+      const pubPem = pk ? await fs.readFile(pk, "utf8") : undefined;
+      const ok = await verifyVC(vc, pubPem);
+      console.log(ok ? "OK" : "FAILED");
+      if (!ok) process.exit(1);
       return;
     }
     default:
@@ -131,3 +227,4 @@ Usage:
 }
 
 main().catch((e) => { console.error(e.message ?? String(e)); process.exit(1); });
+

@@ -5,19 +5,41 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": { "attest": "./dist/cli.js" },
-  "files": ["dist", "README.md", "ARCHITECTURE.md", "LICENSE"],
+  "bin": {
+    "attest": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "ARCHITECTURE.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "node --test --import tsx 'src/**/*.test.ts'",
     "cli": "tsx src/cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "keywords": ["agent", "ai", "attestation", "receipts", "signing", "audit", "compliance"],
+  "keywords": [
+    "agent",
+    "ai",
+    "attestation",
+    "receipts",
+    "signing",
+    "audit",
+    "compliance"
+  ],
   "author": "Vlad Bordei <bordeivlad@gmail.com> (https://github.com/p-vbordei)",
   "license": "Apache-2.0",
-  "engines": { "node": ">=22.19.0" },
-  "dependencies": { "uuid": "^11.0.0" },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "sigstore": "^4.1.1",
+    "uuid": "^11.0.0"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/uuid": "^10.0.0",

@@ -166,4 +166,50 @@ describe("CLI smoke test", () => {
     assert.match(out.stdout, /FAILED/);
     assert.match(out.stdout, /link broken/);
   });
+
+  it("sign-keyless emits a keyless receipt JSON", () => {
+    const r = spawnSync("npx", ["--no-install", "tsx", CLI,
+      "sign-keyless",
+      "--agent", "claude-opus-4-7",
+      "--actor", "user:alice",
+      "--verb", "send_message",
+      "--target", "slack:#team",
+      "--outcome", "succeeded"
+    ], {
+      encoding: "utf8",
+      env: { ...process.env, SIGSTORE_MOCK: "true" }
+    });
+    assert.equal(r.status, 0, `stderr: ${r.stderr}`);
+    const receipt = JSON.parse(r.stdout);
+    assert.equal(receipt.signature.algorithm, "sigstore-keyless");
+    assert.equal(receipt.signature.keyId, "user:alice");
+  });
+
+  it("vc-export exports to W3C VC and verify-vc verifies it", async () => {
+    const outVc = path.join(dir, "r1-vc.json");
+    const rExport = runCli([
+      "vc-export",
+      path.join(dir, "r1.json"),
+      "--key",
+      path.join(dir, "agent.key"),
+      "--out",
+      outVc
+    ]);
+    assert.equal(rExport.status, 0, `stderr: ${rExport.stderr}`);
+    
+    const vcContent = await fs.readFile(outVc, "utf8");
+    const vc = JSON.parse(vcContent);
+    assert.equal(vc.type[0], "VerifiableCredential");
+    assert.equal(vc.credentialSubject.actor, "user:alice");
+
+    const rVerify = runCli([
+      "verify-vc",
+      outVc,
+      "--public-key",
+      path.join(dir, "agent.pub")
+    ]);
+    assert.equal(rVerify.status, 0, `stderr: ${rVerify.stderr}`);
+    assert.match(rVerify.stdout, /OK/);
+  });
 });
+
