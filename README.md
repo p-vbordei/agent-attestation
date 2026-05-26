@@ -84,10 +84,10 @@ pnpm cli trail trail.jsonl receipt.json receipt2.json
 - [x] CLI: `keygen`, `sign-action`, `verify`, `inspect`, `trail`
 - [x] Trail validation (chain link integrity)
 - [x] Unit tests
-- [ ] OpenTelemetry exporter: attach receipt as a span attribute
-- [ ] Verifiable Credentials (W3C VC v2) mapping
-- [ ] Sigstore-keyless variant for runtime-attested identities
-- [ ] Plugin examples for LangChain / OpenAI Agents SDK
+- [x] OpenTelemetry exporter: attach receipt as a span attribute
+- [x] Verifiable Credentials (W3C VC v2) mapping
+- [x] Sigstore-keyless variant for runtime-attested identities
+- [x] Plugin examples for LangChain / OpenAI Agents SDK
 
 ## How agents adopt this
 
